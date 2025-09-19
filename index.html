@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Text Humanizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+    <div class="container mx-auto px-4 py-8 md:py-12 max-w-4xl">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800 dark:text-white">AI Text Humanizer</h1>
+            <p class="mt-3 text-lg text-gray-600 dark:text-gray-300">Refine AI-generated text to sound more natural and engaging.</p>
+        </header>
+
+        <main class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 md:p-8">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Input Text Area -->
+                <div>
+                    <label for="inputText" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">🤖 Paste AI Text Here</label>
+                    <textarea id="inputText" rows="12" class="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="Enter the text you want to humanize..."></textarea>
+                </div>
+
+                <!-- Output Text Area -->
+                <div>
+                    <label for="outputText" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">🧑‍💻 Humanized Output</label>
+                    <div id="outputContainer" class="relative w-full h-full">
+                        <textarea id="outputText" rows="12" class="w-full h-full p-4 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="Your humanized text will appear here..." readonly></textarea>
+                        <button id="copyButton" class="absolute top-2 right-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-1 px-3 rounded-md text-sm transition opacity-0">
+                            Copy
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Button and Status -->
+            <div class="mt-6 text-center">
+                <button id="humanizeBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg text-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:focus:ring-blue-800">
+                    <span id="btnText">Humanize Text</span>
+                    <div id="loader" class="loader hidden mx-auto"></div>
+                </button>
+                <p id="error-message" class="text-red-500 mt-4 h-5"></p>
+            </div>
+            
+        </main>
+        
+        <footer class="text-center mt-8 text-sm text-gray-500 dark:text-gray-400">
+            <p>Please use this tool responsibly and ethically. See README for details.</p>
+        </footer>
+
+    </div>
+
+    <script>
+        // DOM element references
+        const humanizeBtn = document.getElementById('humanizeBtn');
+        const inputText = document.getElementById('inputText');
+        const outputText = document.getElementById('outputText');
+        const errorMessage = document.getElementById('error-message');
+        const btnText = document.getElementById('btnText');
+        const loader = document.getElementById('loader');
+        const copyButton = document.getElementById('copyButton');
+        const outputContainer = document.getElementById('outputContainer');
+        
+        // --- Event Listeners ---
+        humanizeBtn.addEventListener('click', handleHumanizeClick);
+        copyButton.addEventListener('click', copyToClipboard);
+
+        outputContainer.addEventListener('mouseenter', () => {
+            if (outputText.value.trim() !== '') {
+                copyButton.classList.remove('opacity-0');
+            }
+        });
+
+        outputContainer.addEventListener('mouseleave', () => {
+            copyButton.classList.add('opacity-0');
+        });
+
+        // --- Core Functions ---
+
+        /**
+         * Handles the click event for the humanize button.
+         * It gets the input text, validates it, and initiates the API call.
+         */
+        async function handleHumanizeClick() {
+            const textToHumanize = inputText.value.trim();
+            if (!textToHumanize) {
+                showError('Please enter some text to humanize.');
+                return;
+            }
+            clearError();
+            setLoadingState(true);
+
+            try {
+                // The system prompt that guides the AI model
+                const systemPrompt = `You are a world-class writer and editor. Your task is to rewrite the given text, which was generated by an AI. 
+                Your goal is to make it sound completely natural, fluent, and human-written.
+                - Vary sentence structure and length to create a more engaging rhythm.
+                - Replace common AI-generated phrases and vocabulary with more sophisticated and natural alternatives.
+                - Improve the flow and coherence of the text.
+                - Ensure the original meaning, facts, and intent are fully preserved.
+                - Do not add any new information.
+                - Do not add any introductory or concluding phrases like "Here is the rewritten text:". Just provide the rewritten text directly.`;
+
+                const humanizedText = await callGeminiAPI(systemPrompt, textToHumanize);
+                outputText.value = humanizedText;
+
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Failed to humanize text. Please try again.');
+                outputText.value = '';
+            } finally {
+                setLoadingState(false);
+            }
+        }
+
+        /**
+         * Calls the Gemini API to humanize the text.
+         * @param {string} systemInstruction - The instructions for the model.
+         * @param {string} userQuery - The text to be humanized.
+         * @returns {Promise<string>} The humanized text from the API.
+         */
+        async function callGeminiAPI(systemInstruction, userQuery) {
+            // NOTE: In a real production environment, the API key should not be exposed client-side.
+            // This setup assumes the key is provided by the execution environment (like Canvas).
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+            const payload = {
+                systemInstruction: {
+                    parts: [{ text: systemInstruction }]
+                },
+                contents: [{
+                    parts: [{ text: userQuery }]
+                }],
+            };
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.json();
+                console.error('API Error Response:', errorBody);
+                throw new Error(`API request failed with status ${response.status}`);
+            }
+
+            const result = await response.json();
+            const candidate = result.candidates?.[0];
+
+            if (candidate && candidate.content?.parts?.[0]?.text) {
+                return candidate.content.parts[0].text;
+            } else {
+                console.error('Unexpected API response structure:', result);
+                throw new Error('Could not extract text from the API response.');
+            }
+        }
+
+        /**
+         * Toggles the UI between loading and idle states.
+         * @param {boolean} isLoading - Whether to show the loading state.
+         */
+        function setLoadingState(isLoading) {
+            if (isLoading) {
+                humanizeBtn.disabled = true;
+                btnText.classList.add('hidden');
+                loader.classList.remove('hidden');
+                humanizeBtn.classList.add('cursor-not-allowed');
+            } else {
+                humanizeBtn.disabled = false;
+                btnText.classList.remove('hidden');
+                loader.classList.add('hidden');
+                humanizeBtn.classList.remove('cursor-not-allowed');
+            }
+        }
+
+        /**
+         * Displays an error message to the user.
+         * @param {string} message - The error message to display.
+         */
+        function showError(message) {
+            errorMessage.textContent = message;
+        }
+
+        /**
+         * Clears the error message.
+         */
+        function clearError() {
+            errorMessage.textContent = '';
+        }
+
+        /**
+         * Copies the content of the output text area to the clipboard.
+         */
+        function copyToClipboard() {
+            if (!outputText.value) return;
+            
+            // Using document.execCommand for broader compatibility in sandboxed environments
+            outputText.select();
+            outputText.setSelectionRange(0, 99999); // For mobile devices
+            try {
+                document.execCommand('copy');
+                copyButton.textContent = 'Copied!';
+                setTimeout(() => {
+                    copyButton.textContent = 'Copy';
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                copyButton.textContent = 'Error';
+                 setTimeout(() => {
+                    copyButton.textContent = 'Copy';
+                }, 2000);
+            }
+            window.getSelection().removeAllRanges();
+        }
+    </script>
+</body>
+</html>
